@@ -1,5 +1,5 @@
 // app/tetris/lib/useTetris.ts
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 type Cell = number
 export type Grid = Cell[][]
@@ -10,14 +10,14 @@ type Tetromino = {
   y: number
 }
 
-const TETROMINOS: { shape: Cell[][]; id: number }[] = [
-  { shape: [[1, 1, 1, 1]], id: 1 },             // I - Cyan
-  { shape: [[1, 1], [1, 1]], id: 2 },           // O - Yellow
-  { shape: [[0, 1, 0], [1,  1, 1]], id: 3 },    // T - Purple
-  { shape: [[1, 1, 0], [0, 1, 1]], id: 4 },     // S - Green
-  { shape: [[0, 1, 1], [1, 1, 0]], id: 5 },     // Z - Red
-  { shape: [[1, 0, 0], [1, 1, 1]], id: 6 },     // J - Blue
-  { shape: [[0, 0, 1], [1, 1, 1]], id: 7 },     // L - Orange
+const TETROMINOS = [
+  { shape: [[1, 1, 1, 1]], id: 1 },
+  { shape: [[1, 1], [1, 1]], id: 2 },
+  { shape: [[0, 1, 0], [1, 1, 1]], id: 3 },
+  { shape: [[1, 1, 0], [0, 1, 1]], id: 4 },
+  { shape: [[0, 1, 1], [1, 1, 0]], id: 5 },
+  { shape: [[1, 0, 0], [1, 1, 1]], id: 6 },
+  { shape: [[0, 0, 1], [1, 1, 1]], id: 7 },
 ]
 
 const createEmptyGrid = (): Grid =>
@@ -35,6 +35,15 @@ export function useTetris() {
   const [isRunning, setIsRunning] = useState(true)
   const [score, setScore] = useState(0)
   const [clearingRows, setClearingRows] = useState<number[]>([])
+  const [level, setLevel] = useState(1)
+  const [linesCleared, setLinesCleared] = useState(0)
+  const [isFastDropping, setIsFastDropping] = useState(false)
+
+  const intervalRef = useRef<NodeJS.Timeout | null>(null)
+
+  const baseSpeed = 500
+  const speed = Math.max(100, baseSpeed - (level - 1) * 50)
+  const dropSpeed = isFastDropping ? 50 : speed
 
   const collides = (piece: Tetromino, grid: Grid): boolean => {
     return piece.shape.some((row, dy) =>
@@ -82,12 +91,17 @@ export function useTetris() {
 
       if (fullRows.length > 0) {
         setClearingRows(fullRows)
-
         setTimeout(() => {
           const newGrid = mergedGrid.filter((_, i) => !fullRows.includes(i))
           while (newGrid.length < 20) newGrid.unshift(Array(10).fill(0))
           setGrid(newGrid)
           setScore((prev) => prev + fullRows.length * 100)
+          setLinesCleared(prev => {
+            const total = prev + fullRows.length
+            const newLevel = Math.floor(total / 10) + 1
+            setLevel(newLevel)
+            return total
+          })
           setClearingRows([])
         }, 300)
       } else {
@@ -117,23 +131,36 @@ export function useTetris() {
 
   useEffect(() => {
     if (!isRunning) return
-    const interval = setInterval(() => {
+    if (intervalRef.current) clearInterval(intervalRef.current)
+    intervalRef.current = setInterval(() => {
       moveDown()
-    }, 500)
-    return () => clearInterval(interval)
-  }, [current, isRunning])
+    }, dropSpeed)
+    return () => clearInterval(intervalRef.current!)
+  }, [current, isRunning, dropSpeed])
 
   useEffect(() => {
     const handle = (e: KeyboardEvent) => {
       if (!isRunning) return
       if (e.key === "ArrowLeft") move(-1)
       if (e.key === "ArrowRight") move(1)
-      if (e.key === "ArrowDown") moveDown()
+      if (e.key === "ArrowDown") {
+        setIsFastDropping(true)
+      }
       if (e.key === "ArrowUp") rotate()
     }
 
+    const handleUp = (e: KeyboardEvent) => {
+      if (e.key === "ArrowDown") {
+        setIsFastDropping(false)
+      }
+    }
+
     window.addEventListener("keydown", handle)
-    return () => window.removeEventListener("keydown", handle)
+    window.addEventListener("keyup", handleUp)
+    return () => {
+      window.removeEventListener("keydown", handle)
+      window.removeEventListener("keyup", handleUp)
+    }
   }, [current, grid, isRunning])
 
   const displayGrid = merge(grid, current)
@@ -143,6 +170,7 @@ export function useTetris() {
     isRunning,
     setIsRunning,
     score,
+    level,
     clearingRows,
   }
 }
