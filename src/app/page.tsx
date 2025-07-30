@@ -12,7 +12,7 @@ export default function TetrisPage() {
     useTetris();
 
   return (
-    <main className="min-h-screen bg-black text-white flex flex-col items-center justify-center">
+    <main className="min-h-screen bg-gradient-to-b from-gray-800 to-gray-900 text-white flex flex-col items-center justify-center">
       <h1 className="text-4xl font-bold mb-2">Tetris</h1>
       <p className="text-xl mb-1">Pontuação: {score}</p>
       <p className="text-md mb-4">Nível: {level}</p>
