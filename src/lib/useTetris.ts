@@ -1,10 +1,9 @@
-// app/tetris/lib/useTetris.ts
 import { useEffect, useRef, useState } from "react"
 
 type Cell = number
 export type Grid = Cell[][]
 
-type Tetromino = {
+export type Tetromino = {
   shape: Cell[][]
   x: number
   y: number
@@ -29,15 +28,23 @@ function randomTetromino(): Tetromino {
   return { shape, x: 3, y: 0 }
 }
 
+const deepClone = (piece: Tetromino): Tetromino => ({
+  shape: piece.shape.map(row => [...row]),
+  x: piece.x,
+  y: piece.y,
+})
+
 export function useTetris() {
   const [grid, setGrid] = useState<Grid>(createEmptyGrid)
   const [current, setCurrent] = useState<Tetromino>(randomTetromino)
+  const [next, setNext] = useState<Tetromino>(randomTetromino)
   const [isRunning, setIsRunning] = useState(true)
   const [score, setScore] = useState(0)
   const [clearingRows, setClearingRows] = useState<number[]>([])
   const [level, setLevel] = useState(1)
   const [linesCleared, setLinesCleared] = useState(0)
   const [isFastDropping, setIsFastDropping] = useState(false)
+  const [gameOver, setGameOver] = useState(false)
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -51,15 +58,13 @@ export function useTetris() {
         if (!value) return false
         const x = piece.x + dx
         const y = piece.y + dy
-        return (
-          y >= 20 || x < 0 || x >= 10 || (y >= 0 && grid[y][x] !== 0)
-        )
+        return y >= 20 || x < 0 || x >= 10 || (y >= 0 && grid[y][x] !== 0)
       })
     )
   }
 
   const merge = (grid: Grid, piece: Tetromino): Grid => {
-    const tempGrid = grid.map((row) => [...row])
+    const tempGrid = grid.map(row => [...row])
     piece.shape.forEach((row, dy) => {
       row.forEach((value, dx) => {
         if (value) {
@@ -80,6 +85,16 @@ export function useTetris() {
       return acc
     }, [])
 
+  // Spawn piece e verifica game over
+  const spawnPiece = (piece: Tetromino) => {
+    if (collides(piece, grid)) {
+      setIsRunning(false)
+      setGameOver(true)
+    } else {
+      setCurrent(piece)
+    }
+  }
+
   const moveDown = () => {
     const newPiece = { ...current, y: current.y + 1 }
 
@@ -95,7 +110,7 @@ export function useTetris() {
           const newGrid = mergedGrid.filter((_, i) => !fullRows.includes(i))
           while (newGrid.length < 20) newGrid.unshift(Array(10).fill(0))
           setGrid(newGrid)
-          setScore((prev) => prev + fullRows.length * 100)
+          setScore(prev => prev + fullRows.length * 100)
           setLinesCleared(prev => {
             const total = prev + fullRows.length
             const newLevel = Math.floor(total / 10) + 1
@@ -103,12 +118,14 @@ export function useTetris() {
             return total
           })
           setClearingRows([])
+          spawnPiece(next)
+          setNext(randomTetromino())
         }, 300)
       } else {
         setGrid(mergedGrid)
+        spawnPiece(next)
+        setNext(randomTetromino())
       }
-
-      setCurrent(randomTetromino())
     }
   }
 
@@ -121,11 +138,44 @@ export function useTetris() {
 
   const rotate = () => {
     const rotated = current.shape[0].map((_, i) =>
-      current.shape.map((row) => row[i]).reverse()
+      current.shape.map(row => row[i]).reverse()
     )
     const newPiece = { ...current, shape: rotated }
     if (!collides(newPiece, grid)) {
       setCurrent(newPiece)
+    }
+  }
+
+  const hardDrop = () => {
+    let newPiece = deepClone(current)
+    while (!collides({ ...newPiece, y: newPiece.y + 1 }, grid)) {
+      newPiece.y += 1
+    }
+
+    const mergedGrid = merge(grid, newPiece)
+    const fullRows = detectFullRows(mergedGrid)
+
+    if (fullRows.length > 0) {
+      setClearingRows(fullRows)
+      setTimeout(() => {
+        const newGrid = mergedGrid.filter((_, i) => !fullRows.includes(i))
+        while (newGrid.length < 20) newGrid.unshift(Array(10).fill(0))
+        setGrid(newGrid)
+        setScore(prev => prev + fullRows.length * 100)
+        setLinesCleared(prev => {
+          const total = prev + fullRows.length
+          const newLevel = Math.floor(total / 10) + 1
+          setLevel(newLevel)
+          return total
+        })
+        setClearingRows([])
+        spawnPiece(next)
+        setNext(randomTetromino())
+      }, 300)
+    } else {
+      setGrid(mergedGrid)
+      spawnPiece(next)
+      setNext(randomTetromino())
     }
   }
 
@@ -143,16 +193,16 @@ export function useTetris() {
       if (!isRunning) return
       if (e.key === "ArrowLeft") move(-1)
       if (e.key === "ArrowRight") move(1)
-      if (e.key === "ArrowDown") {
-        setIsFastDropping(true)
-      }
+      if (e.key === "ArrowDown") setIsFastDropping(true)
       if (e.key === "ArrowUp") rotate()
+      if (e.key === " ") {
+        e.preventDefault()
+        hardDrop()
+      }
     }
 
     const handleUp = (e: KeyboardEvent) => {
-      if (e.key === "ArrowDown") {
-        setIsFastDropping(false)
-      }
+      if (e.key === "ArrowDown") setIsFastDropping(false)
     }
 
     window.addEventListener("keydown", handle)
@@ -172,5 +222,7 @@ export function useTetris() {
     score,
     level,
     clearingRows,
+    next,
+    gameOver,
   }
 }
