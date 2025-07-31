@@ -18,7 +18,7 @@ const colors = [
 
 export default function NextPiece({ piece }: Props) {
   return (
-    <div className="mt-4 text-center">
+    <div className="mt-4 text-center relative -top-40">
       <p className="mb-2 font-semibold text-white">Próxima peça</p>
       <div className="inline-block bg-gray-900 p-2 rounded">
         {piece.shape.map((row, y) => (
